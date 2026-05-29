@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE
+.idea/
+
+# Data / models (large binary files)
+datasets/
+models/
+benchmark/videos/
+
+# Results and logs (generated outputs)
+benchmark/results/
+benchmark/logs/
+experiment_results.csv
+
+# Misc
+*.csv
