@@ -8,7 +8,8 @@ from config import (
     VIDEO_CONFIG,
     PREPROCESS_CONFIG,
     DETECTION_CONFIG,
-    BENCHMARK_CONFIG
+    BENCHMARK_CONFIG,
+    TRACKER_CONFIG
 )
 from video_source import VideoSource
 from preprocessing import Preprocessor
@@ -16,7 +17,6 @@ from detector import Detector
 from utils.logger import DetectionLogger
 from utils.timer import Timer
 from tracker import Tracker
-from config import TRACKER_CONFIG
 
 
 def draw_tracked_objects(frame, tracked_objects):
