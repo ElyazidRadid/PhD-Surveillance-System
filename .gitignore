@@ -23,3 +23,12 @@ experiment_results.csv
 
 # Misc
 *.csv
+
+# docx working artifacts (unpacked XML, downloaded templates, PDF exports)
+docs/unpacked*/
+docs/springer_template/
+docs/*.pdf
+docs/figures_journal/
+
+# Manuscript build/scratch — keep only the source .docx files tracked
+docs/**/unpacked*/
