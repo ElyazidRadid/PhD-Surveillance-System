@@ -24,6 +24,9 @@ experiment_results.csv
 # Ground-truth annotations (large data; derivable from MOT20, archived on Zenodo)
 benchmark/annotations/
 
+# Regenerable experiment outputs
+experiments/**/outputs/
+
 # Misc
 *.csv
 
