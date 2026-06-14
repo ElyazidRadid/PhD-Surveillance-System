@@ -29,4 +29,12 @@ SEQUENCES = {
     },
 }
 
+# --- Recovery method ---
+# IoU to link a detection to an existing tracklet across consecutive frames.
+ASSOCIATION_IOU = 0.3
+# Only interpolate gaps no longer than this many frames (precision/recall knob).
+MAX_GAP = 3
+# Confidence assigned to a recovered (interpolated) box.
+RECOVERED_CONFIDENCE = 0.5
+
 OUTPUT_DIR = "experiments/paper2_phantom_recall/outputs"
