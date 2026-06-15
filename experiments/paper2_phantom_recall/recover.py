@@ -15,6 +15,7 @@ threshold can surface.
 
 from core.metrics.iou import compute_iou
 from core.metrics.evaluator import load_json, index_by_frame
+from core.tracking.tracker import Tracker
 
 
 def _filter(dets, tau, target_class):
@@ -25,6 +26,22 @@ def _filter(dets, tau, target_class):
 def _lerp_box(b0, b1, t):
     """Linear interpolation between two boxes; t in (0,1)."""
     return [b0[i] + (b1[i] - b0[i]) * t for i in range(4)]
+
+
+def assemble(det_frames, fids, recovered, tau, target_class, recovered_conf):
+    """Merge original (>=tau) detections with a {fid: [recovered bbox]} map."""
+    out = {}
+    for fid in fids:
+        merged = [dict(d) for d in _filter(det_frames[fid], tau, target_class)]
+        for box in recovered.get(fid, []):
+            merged.append({
+                "class_name": target_class,
+                "confidence": recovered_conf,
+                "bbox": [int(round(v)) for v in box],
+                "recovered": True,
+            })
+        out[fid] = merged
+    return out
 
 
 def build_tracklets(det_frames, fids, assoc_iou, max_gap, tau, target_class):
@@ -88,6 +105,67 @@ def augmented_detections(det_path, assoc_iou, max_gap, tau, target_class, recove
 
     tracklets = build_tracklets(det_frames, fids, assoc_iou, max_gap, tau, target_class)
     recovered = recovered_boxes_by_frame(tracklets, max_gap)
+
+    out = {}
+    for fid in fids:
+        dets = _filter(det_frames[fid], tau, target_class)
+        merged = [dict(d) for d in dets]
+        for box in recovered.get(fid, []):
+            merged.append({
+                "class_name": target_class,
+                "confidence": recovered_conf,
+                "bbox": [int(round(v)) for v in box],
+                "recovered": True,
+            })
+        out[fid] = merged
+    return out, recovered
+
+
+# ---------------------------------------------------------------------------
+# v2: ByteTrack association + track-length filtering
+# ---------------------------------------------------------------------------
+
+def build_track_timelines(det_path, tracker_config, tau, target_class):
+    """Run ByteTrack over the detections; return {track_id: {frame: bbox}}."""
+    det_frames = index_by_frame(load_json(det_path), "detections")
+    fids = sorted(det_frames)
+    tracker = Tracker(tracker_config)
+
+    timelines = {}
+    for fid in fids:
+        dets = _filter(det_frames[fid], tau, target_class)
+        for t in tracker.update(dets):
+            tid = t["track_id"]
+            if tid < 0:
+                continue
+            timelines.setdefault(tid, {})[fid] = t["bbox"]
+    return det_frames, fids, timelines
+
+
+def recovered_boxes_filtered(timelines, max_gap, min_track_length):
+    """Interpolate gaps only inside tracks confirmed over >= min_track_length frames."""
+    recovered = {}
+    for boxes in timelines.values():
+        if len(boxes) < min_track_length:
+            continue
+        frames = sorted(boxes)
+        for a, b in zip(frames, frames[1:]):
+            gap = b - a
+            if 2 <= gap <= max_gap + 1:
+                box_a, box_b = boxes[a], boxes[b]
+                for f in range(a + 1, b):
+                    t = (f - a) / gap
+                    recovered.setdefault(f, []).append(_lerp_box(box_a, box_b, t))
+    return recovered
+
+
+def augmented_detections_bytetrack(det_path, tracker_config, max_gap, min_track_length,
+                                   tau, target_class, recovered_conf):
+    """ByteTrack-based recovery: original (>=tau) + interpolated boxes from
+    confirmed tracks only. Returns {fid: [detection dicts]}, recovered map."""
+    det_frames, fids, timelines = build_track_timelines(
+        det_path, tracker_config, tau, target_class)
+    recovered = recovered_boxes_filtered(timelines, max_gap, min_track_length)
 
     out = {}
     for fid in fids:

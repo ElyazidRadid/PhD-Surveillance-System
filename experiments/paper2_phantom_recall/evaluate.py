@@ -20,9 +20,12 @@ from core.metrics.metrics import precision as prec_fn, recall as rec_fn, f1 as f
 from core.metrics.evaluator import load_json, index_by_frame
 from .config import (
     OPERATING_THRESHOLD, IOU_THRESHOLD, ASSOCIATION_IOU, RECOVERED_CONFIDENCE,
-    TARGET_CLASS, SEQUENCES, OUTPUT_DIR,
+    TRACKER_CONFIG, MIN_TRACK_LENGTH, TARGET_CLASS, SEQUENCES, OUTPUT_DIR,
 )
-from .recover import augmented_detections
+from .recover import (
+    assemble, build_tracklets, recovered_boxes_by_frame,
+    build_track_timelines, recovered_boxes_filtered,
+)
 
 
 def _counts(preds, gts):
@@ -62,25 +65,38 @@ def _aggregate(pred_by_frame, gt_frames):
 
 def evaluate_sequence(det_path, gt_path, max_gaps):
     gt_frames = index_by_frame(load_json(gt_path), "objects")
+    det_frames = index_by_frame(load_json(det_path), "detections")
+    fids = sorted(det_frames)
 
-    # Baseline: detector only at operating threshold.
-    base_aug, _ = augmented_detections(
-        det_path, ASSOCIATION_IOU, max_gap=0, tau=OPERATING_THRESHOLD,
-        target_class=TARGET_CLASS, recovered_conf=RECOVERED_CONFIDENCE,
-    )
-    bp, br, bf = _aggregate(base_aug, gt_frames)
-    rows = [{"setting": "baseline", "max_gap": 0,
+    def aug_for(recovered):
+        return assemble(det_frames, fids, recovered, OPERATING_THRESHOLD,
+                        TARGET_CLASS, RECOVERED_CONFIDENCE)
+
+    # Baseline: detector only (no recovered boxes).
+    bp, br, bf = _aggregate(aug_for({}), gt_frames)
+    rows = [{"setting": "baseline", "method": "none", "max_gap": 0,
              "precision": bp, "recall": br, "f1": bf}]
 
-    for g in max_gaps:
-        aug, _ = augmented_detections(
-            det_path, ASSOCIATION_IOU, max_gap=g, tau=OPERATING_THRESHOLD,
-            target_class=TARGET_CLASS, recovered_conf=RECOVERED_CONFIDENCE,
-        )
-        p, r, f = _aggregate(aug, gt_frames)
-        rows.append({"setting": f"recovered(max_gap={g})", "max_gap": g,
+    def add_row(name, method, g, recovered):
+        p, r, f = _aggregate(aug_for(recovered), gt_frames)
+        rows.append({"setting": name, "method": method, "max_gap": g,
                      "precision": p, "recall": r, "f1": f,
                      "d_recall": r - br, "d_precision": p - bp, "d_f1": f - bf})
+
+    # v1: build greedy tracklets ONCE, apply each max_gap.
+    tracklets = build_tracklets(det_frames, fids, ASSOCIATION_IOU,
+                                max(max_gaps), OPERATING_THRESHOLD, TARGET_CLASS)
+    for g in max_gaps:
+        add_row(f"v1 greedy(gap={g})", "greedy", g,
+                recovered_boxes_by_frame(tracklets, g))
+
+    # v2: build ByteTrack timelines ONCE, apply each max_gap.
+    _, _, timelines = build_track_timelines(
+        det_path, TRACKER_CONFIG, OPERATING_THRESHOLD, TARGET_CLASS)
+    for g in max_gaps:
+        add_row(f"v2 bytetrack(gap={g})", "bytetrack", g,
+                recovered_boxes_filtered(timelines, g, MIN_TRACK_LENGTH))
+
     return rows
 
 
@@ -94,7 +110,7 @@ def main():
             continue
         rows = evaluate_sequence(paths["detections"], paths["annotations"], max_gaps)
         results[seq] = rows
-        print(f"\n=== {seq} (tau={OPERATING_THRESHOLD}, assoc_iou={ASSOCIATION_IOU}) ===")
+        print(f"\n=== {seq} (tau={OPERATING_THRESHOLD}, min_track_len={MIN_TRACK_LENGTH}) ===")
         print(f"  {'setting':>22} {'precision':>10} {'recall':>8} {'f1':>8}")
         for r in rows:
             extra = ""

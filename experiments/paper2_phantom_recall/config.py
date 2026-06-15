@@ -29,12 +29,24 @@ SEQUENCES = {
     },
 }
 
-# --- Recovery method ---
+# --- Recovery method (v1: toy greedy-IoU linker) ---
 # IoU to link a detection to an existing tracklet across consecutive frames.
 ASSOCIATION_IOU = 0.3
 # Only interpolate gaps no longer than this many frames (precision/recall knob).
 MAX_GAP = 3
 # Confidence assigned to a recovered (interpolated) box.
 RECOVERED_CONFIDENCE = 0.5
+
+# --- Recovery method (v2: ByteTrack association + track-length filtering) ---
+# Permissive ByteTrack config so low-confidence detections still form tracks.
+TRACKER_CONFIG = {
+    "track_activation_threshold": 0.05,
+    "lost_track_buffer": 30,
+    "minimum_matching_threshold": 0.8,
+    "frame_rate": 25,
+}
+# Only interpolate gaps inside tracks confirmed over at least this many frames.
+# This is the precision-protection knob: flaky short tracks spawn no revivals.
+MIN_TRACK_LENGTH = 5
 
 OUTPUT_DIR = "experiments/paper2_phantom_recall/outputs"

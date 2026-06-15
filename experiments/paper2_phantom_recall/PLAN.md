@@ -71,6 +71,36 @@ pivot again (to the Density-Cliff study).
 
 - [x] `config.py` — operating threshold, IoU thresholds, temporal window
 - [x] `recoverable_recall.py` — go/no-go ceiling analysis
-- [ ] `recover.py` — actual fusion method (interpolate / track-validated revival)
-- [ ] `evaluate.py` — recall/precision vs. baselines, across models & sequences
-- [ ] `analysis.R` — figures (reuse Paper-1 journal style)
+- [x] `recover.py` — recovery method (greedy-IoU linker + ByteTrack variant)
+- [x] `evaluate.py` — recall/precision vs. baselines
+- [x] `min_track_sweep.py` — diagnostic / tuning sweep
+- [ ] `analysis.R` — figures (deferred)
+
+## 7. Status — SHELVED (with findings recorded)
+
+**Go/no-go: PASSED.** Recoverable-recall ceiling is real: 6–31 % of false
+negatives reappear in adjacent frames (+0.04 strict to +0.15 loose recall,
+beyond the threshold ceiling).
+
+**Method result (best so far): modest.** A simple greedy-IoU linker with linear
+gap interpolation gives:
+- MOT20-05 (dense): **+0.017 F1** (recall +0.022, precision −0.014) at gap≤3.
+- MOT20-02 (moderate): essentially flat (+0.0007).
+
+**Two attempted improvements both FAILED (important, counterintuitive):**
+1. **ByteTrack association** recovers 6.7× *fewer* boxes than the naive linker
+   (3.5k vs 24k on MOT20-05). ByteTrack is conservative by design (avoids ID
+   switches) → fragments tracks in dense crowds → exposes few interpolatable
+   gaps. For recall recovery we *want* liberal gap-bridging.
+2. **`min_track_length` filtering** had no effect (mtl=1 and mtl=5 recover the
+   same count) — the filter was never the bottleneck; ByteTrack's fragmentation
+   was.
+
+**Conclusion / why shelved:** the simple linker is the best method but the gain
+is modest, and the two sophistication attempts did not help. Captures only part
+of the recoverable ceiling. Shelved pending a fresh idea to close the gap
+(motion-aware interpolation, larger gaps with confidence-gating) or a pivot.
+
+**If resumed, start here:** push the greedy linker (larger `max_gap` with
+confidence-gated revivals; tune `ASSOCIATION_IOU`; motion-aware interpolation)
+toward the +0.04 strict ceiling — not ByteTrack.
